@@ -1,0 +1,5 @@
+build/
+MacKernelSDK/
+.DS_Store
+*.xcuserstate
+xcuserdata/
