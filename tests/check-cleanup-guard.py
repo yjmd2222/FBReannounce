@@ -45,6 +45,8 @@ if cache.exists():
         address, size = 0x7ff805075000, 0x3f3ffa
         mapping = next(m for m in mappings if m[0] <= address and address + size <= m[0] + m[1])
         f.seek(mapping[2] + address - mapping[0]); text = f.read(size)
-    assert text.count(original) == 1 and text.find(original) == 0x10bbb6
+    # The active Lilu cache patch can be visible through this file mapping.
+    matches = [(text.count(p), text.find(p)) for p in (original, patched)]
+    assert sum(n for n, _ in matches) == 1 and any(n == 1 and offset == 0x10bbb6 for n, offset in matches)
     assert (0x10bbb6 & 0xfff) + len(original) <= 4096
-    print('Unique original pattern in tested SkyLight; patch fits one validation page')
+    print('Unique original/applied pattern in tested SkyLight; patch fits one validation page')

@@ -21,6 +21,7 @@
 #include <Headers/kern_user.hpp>
 #include <Library/plugin_start.cpp>
 #include "CleanupGuard.hpp"
+#include "NativeHiDPICheck.hpp"
 
 static const char *procWindowServer = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/Resources/WindowServer";
 static const char *libSkyLight = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/SkyLight";
@@ -47,6 +48,13 @@ static UserPatcher::BinaryModPatch patches[] {
 	{CPU_TYPE_X86_64, 0, WSCleanupGuard::findBytes, WSCleanupGuard::replBytes, sizeof(WSCleanupGuard::findBytes), 0, 1, UserPatcher::FileSegment::SegmentTextText, 1}
 };
 
+static UserPatcher::BinaryModPatch nativeHiDPIPatch[] {
+    {CPU_TYPE_X86_64, 0, NativeHiDPICheck::findBytes, NativeHiDPICheck::replBytes, sizeof(NativeHiDPICheck::findBytes), 0, 1, UserPatcher::FileSegment::SegmentTextText, 1}
+};
+static UserPatcher::BinaryModInfo nativeHiDPIMod[] {
+    {"/System/Library/Frameworks/CoreDisplay.framework/Versions/A/CoreDisplay", nativeHiDPIPatch, arrsize(nativeHiDPIPatch), 0, 0, 0, 0}
+};
+static const char *nativeHiDPIStatus = "not registered";
 static UserPatcher::BinaryModInfo binaryMod[] {
 	{libSkyLight, patches, arrsize(patches), 0, 0, 0, 0}
 };
@@ -80,6 +88,12 @@ PluginConfiguration ADDPR(config) {
             SYSLOG("fbreannounce", "SkyLight guards: menu=%s (%lu bytes), cleanup=%s (%lu bytes), API=%d",
                    guardStatus, sizeof(findBytes), cleanupGuardStatus, sizeof(WSCleanupGuard::findBytes), static_cast<int>(result));
         }
+        if (checkKernelArgument("-fbhidpioff")) nativeHiDPIStatus = "disabled by -fbhidpioff";
+        else {
+            auto result = lilu.onProcLoad(procInfo, arrsize(procInfo), nullptr, nullptr, nativeHiDPIMod, arrsize(nativeHiDPIMod));
+            nativeHiDPIStatus = result == LiluAPI::Error::NoError ? "registered" : "registration failed";
+            SYSLOG("fbreannounce", "native HiDPI orientation check: %s (%lu bytes), API=%d", nativeHiDPIStatus, sizeof(NativeHiDPICheck::findBytes), static_cast<int>(result));
+        }
         auto err = lilu.onKextLoad(&graphicsInfo, 1,
             [](void *, KernelPatcher &patcher, size_t id, mach_vm_address_t, size_t) {
                 if (id != graphicsInfo.loadIndex) return;
@@ -105,6 +119,10 @@ class FBReannounce : public IOService {
     uint64_t last {0};
     bool haveLast {false}, pending {false};
     uint32_t ticksSinceChange {0}, changes {0}, fired {0};
+    uint32_t scalerBefore {0}, scalerAfter {0}, scalerWrites {0};
+    bool haveScaler {false};
+    const char *scalerStatus {"waiting for IOFBScalerInfo"};
+    void advertiseRotatedScaling();
     void tick();
     void status(const char *note);
 public:
@@ -124,6 +142,7 @@ void FBReannounce::status(const char *note) {
         fb->setProperty("FBReannounce-Resolve", resolveStatus);
         fb->setProperty("FBReannounce-WindowServerGuard", guardStatus);
         fb->setProperty("FBReannounce-CleanupGuard", cleanupGuardStatus);
+        fb->setProperty("FBReannounce-NativeHiDPI", nativeHiDPIStatus);
     }
     setProperty("Status", buf);
 }
@@ -140,7 +159,43 @@ IOService *FBReannounce::probe(IOService *provider, SInt32 *score) {
     return IOService::probe(provider, score);
 }
 
+// Apple IODisplayScalerInformation: scalerFeatures at byte16; kIOScaleCanRotate=0x20.
+// Advertise only rotated scaling. Preserve every other feature/limit and all timing data.
+void FBReannounce::advertiseRotatedScaling() {
+    if (checkKernelArgument("-fbscaledrotateoff")) {
+        scalerStatus = "disabled by -fbscaledrotateoff";
+    } else {
+        auto data = OSDynamicCast(OSData, fb->getProperty("IOFBScalerInfo"));
+        if (data && data->getLength() >= 28) {
+            uint32_t features;
+            memcpy(&features, static_cast<const uint8_t *>(data->getBytesNoCopy()) + 16, sizeof(features));
+            if (!haveScaler) { scalerBefore = features; haveScaler = true; }
+            scalerAfter = features;
+            if (!(features & 0x20)) {
+                auto copy = OSData::withData(data);
+                if (copy) {
+                    features |= 0x20;
+                    memcpy(const_cast<uint8_t *>(static_cast<const uint8_t *>(copy->getBytesNoCopy())) + 16, &features, sizeof(features));
+                    bool ok = fb->setProperty("IOFBScalerInfo", copy);
+                    copy->release();
+                    if (ok) {
+                        scalerWrites++;
+                        scalerAfter = features;
+                        SYSLOG("fbreannounce", "rotated scaling features 0x%x -> 0x%x, write=%u", features & ~0x20U, features, scalerWrites);
+                    }
+                    scalerStatus = ok ? "advertised" : "setProperty failed";
+                } else scalerStatus = "allocation failed";
+            } else scalerStatus = "advertised";
+        }
+    }
+    char buf[160];
+    snprintf(buf, sizeof(buf), "%s; before=%s0x%x; after=0x%x; writes=%u", scalerStatus,
+             haveScaler ? "" : "unknown/", scalerBefore, scalerAfter, scalerWrites);
+    fb->setProperty("FBReannounce-RotatedScaling", buf);
+}
+
 void FBReannounce::tick() {
+    advertiseRotatedScaling();
     OSNumber *n = OSDynamicCast(OSNumber, fb->getProperty(kTransformKey));
     if (n) {
         uint64_t v = n->unsigned64BitValue();
@@ -168,6 +223,7 @@ void FBReannounce::tick() {
 bool FBReannounce::start(IOService *provider) {
     if (!IOService::start(provider)) return false;
     fb = provider;
+    advertiseRotatedScaling();
     status("starting");
     loop = IOWorkLoop::workLoop();
     if (loop) {
