@@ -24,7 +24,7 @@
     INFOPLIST_FILE = FBReannounce/Info.plist; MACOSX_DEPLOYMENT_TARGET = 10.14;
     MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.0;
     MODULE_START = "$(PRODUCT_NAME)_kern_start"; MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
-    HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../LiluPatched/Lilu";
+    HEADER_SEARCH_PATHS = ("$(PROJECT_DIR)/../Lilu/Lilu", "$(PROJECT_DIR)/../LiluPatched/Lilu");
     OTHER_LDFLAGS = "-static";
     KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
     KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
@@ -37,7 +37,7 @@
     INFOPLIST_FILE = FBReannounce/Info.plist; MACOSX_DEPLOYMENT_TARGET = 10.14;
     MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.0;
     MODULE_START = "$(PRODUCT_NAME)_kern_start"; MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
-    HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../LiluPatched/Lilu";
+    HEADER_SEARCH_PATHS = ("$(PROJECT_DIR)/../Lilu/Lilu", "$(PROJECT_DIR)/../LiluPatched/Lilu");
     OTHER_LDFLAGS = "-static";
     KERNEL_EXTENSION_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/MacKernelSDK/Headers";
     KERNEL_FRAMEWORK_HEADERS = "$(PROJECT_DIR)/MacKernelSDK/Headers";

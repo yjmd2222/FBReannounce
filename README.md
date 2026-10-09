@@ -22,11 +22,11 @@ The Lilu fork re-enables user-space patching and supports validated shared-cache
 
 ## Build
 
-Keep the patched Lilu checkout next to this repository under the name `LiluPatched`; the project currently references `../LiluPatched/Lilu`. Place MacKernelSDK inside FBReannounce:
+Keep the patched Lilu checkout next to this repository under the name `Lilu`; the project references `../Lilu/Lilu` (the older `../LiluPatched/Lilu` path is also accepted). Place MacKernelSDK inside FBReannounce:
 
 ```text
 parent/
-  LiluPatched/
+  Lilu/
   FBReannounce/
     MacKernelSDK/
     FBReannounce.xcodeproj/
