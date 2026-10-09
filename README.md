@@ -1,6 +1,6 @@
 # FBReannounce
 
-Updated 2026-10-08. Version **0.2.0** fixes internal-display rotation on the **HP Elite x2 1012 G2**, tested with **macOS Ventura 13.7.8 (22H730)**. It combines the former WSNullGuard SkyLight null-display patch with delayed framebuffer connection-change notification. The combined kext is boot-tested and user-confirmed working.
+Updated 2026-10-09. Version **0.2.1** adds a connection-cleanup null-display guard to the **HP Elite x2 1012 G2** rotation workaround for **macOS Ventura 13.7.8 (22H730)**. The previous combined 0.2.0 menu-bar guard and framebuffer reannounce were boot-tested and user-confirmed. The new cleanup guard passes instruction-level tests; both guards are confirmed applied after reboot; the mirrored-to-extended portrait and return-to-landscape test passed without logout.
 
 This is a custom workaround for that machine/OS build. It requires the **patched Lilu user patcher**, not stock upstream Lilu. Do not also load standalone WSNullGuard.
 
@@ -50,17 +50,19 @@ ioreg -r -c AppleIntelFramebuffer -l -w0
 ```
 
 - `FBReannounce-WindowServerGuard=registered`: Lilu accepted registration; this alone does not prove patch application.
+- `FBReannounce-CleanupGuard=registered`: Lilu accepted the new cleanup guard registration; application requires the 42-byte boot-log patch message.
 - `FBReannounce-Resolve=connection-change symbol resolved`: runtime graphics-function lookup succeeded.
 - `FBReannounce-Status`: current transform, changes and fired counter. The fired counter should advance after rotation.
 
-Actual guard application appears in boot kernel diagnostics as `x2g2: patched cache page ... size:56 ... SkyLight`. Capture with `sudo dmesg` on the tested machine. Both this patch message and the framebuffer notification were verified on the combined build.
+Actual guard application appears in boot kernel diagnostics as `x2g2: patched cache page ... size:56 ... SkyLight`. Capture with `sudo dmesg` on the tested machine. The existing 56-byte guard and framebuffer notification were verified on 0.2.0. Version0.2.1 additionally requires a `size:42` patch message; that application was confirmed after reboot on2026-10-09.
 
 ## Disable or roll back
 
 Turn automatic rotation off before disabling the guard. Manual unguarded internal rotation can crash WindowServer.
 
 - `-fbreannounceoff`: disables the combined plugin.
-- `-wsngoff`: disables only SkyLight guard registration.
+- `-wsngoff`: disables both SkyLight guards while retaining framebuffer reannounce.
+- `-wscleanupoff`: disables only the new connection-cleanup guard.
 - `-liluuseroff`: disables Lilu user patching, including the guard.
 
 To undo installation, restore the backed-up kexts and matching OpenCore config. To return to the earlier working pair, restore FBReannounce 0.1.2 together with standalone WSNullGuard and their entries. Do not pair stock Lilu with a guard expecting the patched runtime.
@@ -73,3 +75,9 @@ To undo installation, restore the backed-up kexts and matching OpenCore config. 
 - yjmd2222's HP port: the SkyLight guard, framebuffer helper and combined plugin.
 
 FBReannounce source is [GPL-2.0-only](LICENSE). Dependencies retain their own licenses and attribution.
+
+## Connection cleanup guard (0.2.1)
+
+Adds a second Ventura 13.7.8 SkyLight guard for a null display in `connectionDeallocate`. It stores display ID zero when lookup fails, retains the normal getter for valid displays, and preserves shared-pointer release and the remaining connection cleanup. The exact 42-byte replacement is unique in the tested SkyLight and fits one validated cache page. The existing 56-byte menu-bar guard remains unchanged.
+
+Run `python3 tests/check-cleanup-guard.py` to exercise the actual original/replacement instructions with ASan/UBSan, including null/valid display, absent control and reference-count edge cases. Boot application is verified; the formerly failing mirrored-to-extended portrait test and landscape return passed with the same WindowServer PID and no crash report. `-wscleanupoff` disables only this new guard; `-wsngoff` disables both. `FBReannounce-CleanupGuard=registered` confirms registration only; the Lilu boot log must show the 42-byte cache-page patch applied.

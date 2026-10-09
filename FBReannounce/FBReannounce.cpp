@@ -20,6 +20,7 @@
 #include <Headers/kern_api.hpp>
 #include <Headers/kern_user.hpp>
 #include <Library/plugin_start.cpp>
+#include "CleanupGuard.hpp"
 
 static const char *procWindowServer = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/Resources/WindowServer";
 static const char *libSkyLight = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/SkyLight";
@@ -42,7 +43,8 @@ static const uint8_t replBytes[] {
 static_assert(sizeof(findBytes) == sizeof(replBytes), "patch sizes must match");
 
 static UserPatcher::BinaryModPatch patches[] {
-	{CPU_TYPE_X86_64, 0, findBytes, replBytes, sizeof(findBytes), 0, 1, UserPatcher::FileSegment::SegmentTextText, 1}
+	{CPU_TYPE_X86_64, 0, findBytes, replBytes, sizeof(findBytes), 0, 1, UserPatcher::FileSegment::SegmentTextText, 1},
+	{CPU_TYPE_X86_64, 0, WSCleanupGuard::findBytes, WSCleanupGuard::replBytes, sizeof(WSCleanupGuard::findBytes), 0, 1, UserPatcher::FileSegment::SegmentTextText, 1}
 };
 
 static UserPatcher::BinaryModInfo binaryMod[] {
@@ -55,6 +57,7 @@ static UserPatcher::ProcInfo procInfo[] {
 
 
 static const char *guardStatus = "not registered";
+static const char *cleanupGuardStatus = "not registered";
 
 using ConnectChange = void (*)(IOService *, void *);
 static ConnectChange connectChange = nullptr;
@@ -67,11 +70,15 @@ PluginConfiguration ADDPR(config) {
     disableArgs, 1, nullptr, 0, nullptr, 0, KernelVersion::Ventura, KernelVersion::Ventura,
     []() {
         // Preserve the standalone guard's disable switch for recovery.
-        if (checkKernelArgument("-wsngoff")) guardStatus = "disabled by -wsngoff";
+        if (checkKernelArgument("-wsngoff")) guardStatus = cleanupGuardStatus = "disabled by -wsngoff";
         else {
+            const bool cleanupDisabled = checkKernelArgument("-wscleanupoff");
+            if (cleanupDisabled) binaryMod[0].count = 1;
             auto result = lilu.onProcLoad(procInfo, arrsize(procInfo), nullptr, nullptr, binaryMod, arrsize(binaryMod));
             guardStatus = result == LiluAPI::Error::NoError ? "registered" : "registration failed";
-            SYSLOG("fbreannounce", "SkyLight null-display guard %s (%lu bytes, API=%d)", guardStatus, sizeof(findBytes), static_cast<int>(result));
+            cleanupGuardStatus = cleanupDisabled ? "disabled by -wscleanupoff" : guardStatus;
+            SYSLOG("fbreannounce", "SkyLight guards: menu=%s (%lu bytes), cleanup=%s (%lu bytes), API=%d",
+                   guardStatus, sizeof(findBytes), cleanupGuardStatus, sizeof(WSCleanupGuard::findBytes), static_cast<int>(result));
         }
         auto err = lilu.onKextLoad(&graphicsInfo, 1,
             [](void *, KernelPatcher &patcher, size_t id, mach_vm_address_t, size_t) {
@@ -116,6 +123,7 @@ void FBReannounce::status(const char *note) {
         fb->setProperty("FBReannounce-Status", buf);
         fb->setProperty("FBReannounce-Resolve", resolveStatus);
         fb->setProperty("FBReannounce-WindowServerGuard", guardStatus);
+        fb->setProperty("FBReannounce-CleanupGuard", cleanupGuardStatus);
     }
     setProperty("Status", buf);
 }

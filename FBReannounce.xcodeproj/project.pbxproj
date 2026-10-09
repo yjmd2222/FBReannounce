@@ -20,9 +20,9 @@
   000000000000000000000014 = {isa = XCBuildConfiguration; name = Release; buildSettings = {ARCHS = x86_64; SDKROOT = macosx; CLANG_CXX_LANGUAGE_STANDARD = "gnu++14"; GCC_OPTIMIZATION_LEVEL = s; GCC_TREAT_WARNINGS_AS_ERRORS = YES; CODE_SIGN_IDENTITY = "-"; }; };
   000000000000000000000013 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
     PRODUCT_NAME = FBReannounce; PRODUCT_BUNDLE_IDENTIFIER = org.yjmd2222.FBReannounce;
-    GCC_PREPROCESSOR_DEFINITIONS = ("PRODUCT_NAME=FBReannounce", "MODULE_VERSION=0.2.0", "DEBUG=1");
+    GCC_PREPROCESSOR_DEFINITIONS = ("PRODUCT_NAME=FBReannounce", "MODULE_VERSION=0.2.1", "DEBUG=1");
     INFOPLIST_FILE = FBReannounce/Info.plist; MACOSX_DEPLOYMENT_TARGET = 10.14;
-    MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.0;
+    MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.1;
     MODULE_START = "$(PRODUCT_NAME)_kern_start"; MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
     HEADER_SEARCH_PATHS = ("$(PROJECT_DIR)/../Lilu/Lilu", "$(PROJECT_DIR)/../LiluPatched/Lilu");
     OTHER_LDFLAGS = "-static";
@@ -33,9 +33,9 @@
   }; };
   000000000000000000000015 = {isa = XCBuildConfiguration; name = Release; buildSettings = {
     PRODUCT_NAME = FBReannounce; PRODUCT_BUNDLE_IDENTIFIER = org.yjmd2222.FBReannounce;
-    GCC_PREPROCESSOR_DEFINITIONS = ("PRODUCT_NAME=FBReannounce", "MODULE_VERSION=0.2.0");
+    GCC_PREPROCESSOR_DEFINITIONS = ("PRODUCT_NAME=FBReannounce", "MODULE_VERSION=0.2.1");
     INFOPLIST_FILE = FBReannounce/Info.plist; MACOSX_DEPLOYMENT_TARGET = 10.14;
-    MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.0;
+    MODULE_NAME = org.yjmd2222.FBReannounce; MODULE_VERSION = 0.2.1;
     MODULE_START = "$(PRODUCT_NAME)_kern_start"; MODULE_STOP = "$(PRODUCT_NAME)_kern_stop";
     HEADER_SEARCH_PATHS = ("$(PROJECT_DIR)/../Lilu/Lilu", "$(PROJECT_DIR)/../LiluPatched/Lilu");
     OTHER_LDFLAGS = "-static";
