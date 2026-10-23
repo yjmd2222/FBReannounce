@@ -1,12 +1,12 @@
 # FBReannounce
 
-Updated 2026-10-09. Stable **0.2.1** adds a connection-cleanup null-display guard to the **HP Elite x2 1012 G2** rotation workaround for **macOS Ventura 13.7.8 (22H730)**. The previous combined 0.2.0 menu-bar guard and framebuffer reannounce were boot-tested and user-confirmed. The new cleanup guard passes instruction-level tests; both guards are confirmed applied after reboot; the mirrored-to-extended portrait and return-to-landscape test passed without logout.
+Current version: **0.2.3** for the **HP Elite x2 1012 G2** on **macOS Ventura 13.7.8 (22H730)**. FBReannounce combines framebuffer reannouncement after rotation with two SkyLight null-display guards, a rotated-scaling capability change, and a CoreDisplay patch that restores native HiDPI portrait modes. The framebuffer reannouncement and SkyLight guards have been boot-tested; the native HiDPI patch restored public portrait HiDPI modes on the tested machine. These binary patches target this specific macOS build.
 
-This is a custom workaround for that machine/OS build. It requires the **patched Lilu user patcher**, not stock upstream Lilu. Do not also load standalone WSNullGuard.
+This is a custom workaround for that machine/OS build. It requires the **patched Lilu user patcher**, not stock upstream Lilu. The SkyLight guard functionality that was previously distributed as standalone **WSNullGuard** is incorporated here; do not load that old bundle alongside FBReannounce.
 
 ## What it does
 
-During rotation the internal display can disappear from WindowServer's display list. SkyLight's menu-bar code then dereferences a missing display. The plugin registers a 56-byte null check for that code, preventing the WindowServer crash.
+During rotation the internal display can disappear from WindowServer's display list. SkyLight code can then dereference a missing display. The plugin registers two guards: a 56-byte menu-bar null check and a 42-byte connection-cleanup guard. They handle the missing-display cases while preserving normal display behavior.
 
 The plugin also watches the internal framebuffer's `IOFBTransform`. After a change settles for 1.6 seconds, it calls IOGraphics' connection-change function to restore display enumeration without plugging or unplugging a monitor.
 
