@@ -22,6 +22,7 @@
 #include <Library/plugin_start.cpp>
 #include "CleanupGuard.hpp"
 #include "NativeHiDPICheck.hpp"
+#include "ReannouncePolicy.hpp"
 
 static const char *procWindowServer = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/Resources/WindowServer";
 static const char *libSkyLight = "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/SkyLight";
@@ -118,7 +119,13 @@ class FBReannounce : public IOService {
     IORegistryEntry *fb {nullptr};
     uint64_t last {0};
     bool haveLast {false}, pending {false};
-    uint32_t ticksSinceChange {0}, changes {0}, fired {0};
+    uint32_t ticksSinceChange {0}, changes {0}, fired {0}, skipped {0};
+    OSArray *events {nullptr};
+    bool forceAlways {false};
+    bool hasDisplay {false};
+    uint64_t pixelClock {0}, pixelCount {0};
+    uint32_t powerState {0};
+    void readPanelState();
     uint32_t scalerBefore {0}, scalerAfter {0}, scalerWrites {0};
     bool haveScaler {false};
     const char *scalerStatus {"waiting for IOFBScalerInfo"};
@@ -135,14 +142,27 @@ OSDefineMetaClassAndStructors(FBReannounce, IOService)
 
 // Status goes on the framebuffer node: IOLog is not visible on this machine.
 void FBReannounce::status(const char *note) {
-    char buf[160];
-    snprintf(buf, sizeof(buf), "%s; transform=0x%llx; changes=%u; fired=%u; pending=%d", note, last, changes, fired, pending);
+    char buf[320];
+    snprintf(buf, sizeof(buf), "%s; transform=0x%llx; changes=%u; fired=%u; pending=%d; skipped=%u; display=%d clock=%llu pixels=%llu power=%u",
+             note, last, changes, fired, pending, skipped, hasDisplay, pixelClock, pixelCount, powerState);
     if (fb) {
         fb->setProperty("FBReannounce-Status", buf);
         fb->setProperty("FBReannounce-Resolve", resolveStatus);
         fb->setProperty("FBReannounce-WindowServerGuard", guardStatus);
         fb->setProperty("FBReannounce-CleanupGuard", cleanupGuardStatus);
         fb->setProperty("FBReannounce-NativeHiDPI", nativeHiDPIStatus);
+        fb->setProperty("FBReannounce-ReannouncePolicy", forceAlways ? "always (-fbreannouncealways)" : "conditional (display/timing/power proxies)");
+        // Copy-on-write, bounded event history remains readable after transient changes.
+        auto next = events ? OSArray::withArray(events) : OSArray::withCapacity(64);
+        auto event = OSString::withCString(buf);
+        if (next && event) {
+            if (next->getCount() >= 64) next->removeObject(0);
+            next->setObject(event);
+            fb->setProperty("FBReannounce-ReannounceEvents", next);
+            OSSafeReleaseNULL(events); events = next; next = nullptr;
+        }
+        OSSafeReleaseNULL(event); OSSafeReleaseNULL(next);
+        SYSLOG("fbreannounce", "%s", buf);
     }
     setProperty("Status", buf);
 }
@@ -194,6 +214,26 @@ void FBReannounce::advertiseRotatedScaling() {
     fb->setProperty("FBReannounce-RotatedScaling", buf);
 }
 
+void FBReannounce::readPanelState() {
+    hasDisplay = false; pixelClock = pixelCount = 0; powerState = 0;
+    const auto plane = IORegistryEntry::getPlane("IOService");
+    auto children = plane ? fb->getChildIterator(plane) : nullptr;
+    if (children) {
+        while (auto child = children->getNextObject()) {
+            if (child->metaCast("IODisplayConnect")) { hasDisplay = true; break; }
+        }
+        children->release();
+    }
+    auto clockProperty = fb->copyProperty("IOFBCurrentPixelClock");
+    auto countProperty = fb->copyProperty("IOFBCurrentPixelCount");
+    // IOPowerManagement stores an IOServicePM object; its dictionary is synthesized on serialization.
+    // Read the provider's actual completed power state through the public IOKit API.
+    if (auto service = OSDynamicCast(IOService, fb)) powerState = service->getPowerState();
+    if (auto value = OSDynamicCast(OSNumber, clockProperty)) pixelClock = value->unsigned64BitValue();
+    if (auto value = OSDynamicCast(OSNumber, countProperty)) pixelCount = value->unsigned64BitValue();
+    OSSafeReleaseNULL(clockProperty); OSSafeReleaseNULL(countProperty);
+}
+
 void FBReannounce::tick() {
     advertiseRotatedScaling();
     OSNumber *n = OSDynamicCast(OSNumber, fb->getProperty(kTransformKey));
@@ -208,7 +248,11 @@ void FBReannounce::tick() {
             status("transform changed, waiting to settle");
         } else if (pending && ++ticksSinceChange >= kSettleTicks) {
             pending = false;
-            if (connectChange) {
+            readPanelState();
+            if (!ReannouncePolicy::shouldNotify(forceAlways, hasDisplay, pixelClock, pixelCount, powerState)) {
+                skipped++;
+                status("skipped connectChangeInterrupt; panel appears active");
+            } else if (connectChange) {
                 connectChange(static_cast<IOService *>(fb), nullptr);
                 fired++;
                 status("fired connectChangeInterrupt");
@@ -223,6 +267,8 @@ void FBReannounce::tick() {
 bool FBReannounce::start(IOService *provider) {
     if (!IOService::start(provider)) return false;
     fb = provider;
+    forceAlways = checkKernelArgument("-fbreannouncealways");
+    readPanelState();
     advertiseRotatedScaling();
     status("starting");
     loop = IOWorkLoop::workLoop();
@@ -242,5 +288,6 @@ bool FBReannounce::start(IOService *provider) {
 void FBReannounce::stop(IOService *provider) {
     if (timer) { timer->cancelTimeout(); loop->removeEventSource(timer); timer->release(); timer = nullptr; }
     OSSafeReleaseNULL(loop);
+    OSSafeReleaseNULL(events);
     IOService::stop(provider);
 }
