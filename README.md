@@ -2,11 +2,11 @@
 
 Updated 2026-10-09. Version **0.2.5** tests conditional framebuffer reannounce on the **HP Elite x2 1012 G2** with **macOS Ventura 13.7.8 (22H730)**. Version0.2.3’s SkyLight guards, rotated scaling and portrait HiDPI correction are boot verified. The0.2.4 test never skipped because its power-state read was wrong;0.2.5 corrects that read and is boot verified with all three cache patches applied. The user still reports small text on the first portrait transition; this checkpoint does not claim the scaling or blanking issue is resolved.
 
-This is a custom workaround for that machine/OS build. It requires the **patched Lilu user patcher**, not stock upstream Lilu. Do not also load standalone WSNullGuard.
+This is a custom workaround for that machine/OS build. It requires the **patched Lilu user patcher**, not stock upstream Lilu. The SkyLight guard functionality that was previously distributed as standalone **WSNullGuard** is incorporated here; do not load that old bundle alongside FBReannounce.
 
 ## What it does
 
-During rotation the internal display can disappear from WindowServer's display list. SkyLight's menu-bar code then dereferences a missing display. The plugin registers a 56-byte null check for that code, preventing the WindowServer crash.
+During rotation the internal display can disappear from WindowServer's display list. SkyLight code can then dereference a missing display. The plugin registers two guards: a 56-byte menu-bar null check and a 42-byte connection-cleanup guard. They handle the missing-display cases while preserving normal display behavior.
 
 The plugin also watches the internal framebuffer's `IOFBTransform`. After a change settles for 1.6 seconds, it calls IOGraphics' connection-change function to restore display enumeration without plugging or unplugging a monitor.
 
